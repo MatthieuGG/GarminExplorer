@@ -3,6 +3,8 @@ import pandas as pd
 import os
 import altair as alt
 import plotly.graph_objects as go
+import smtplib
+from email.mime.text import MIMEText
 
 
 #################### Computation
@@ -60,20 +62,40 @@ def date_range_slider_filter(df, date_column, title="Select a period", date_form
 ############### Streamlit
 st.set_page_config(page_title="Garmin Explorer", page_icon="🏃‍➡️")
 st.title("Welcome to the Garmin Explorer!")
+
+st.logo(os.path.join(os.getcwd(), 'images', 'yajirobe.jpg'), size="large", link="https://github.com/MatthieuGG", icon_image=None)
+# Say thanks
+recipient_email = "matthieu.gallou.guyot@gmail.com"
+subject = "Thanks for the Garmin Explorer app!"
+body = "Dear Matthieu, (...)."
+mailto_link = f"mailto:{recipient_email}?subject={subject}&body={body}"
+
+st.sidebar.link_button(
+    label="Say Thanks",
+    url=mailto_link,
+    type="primary",
+    icon="💌"
+)
+
 st.markdown("""
-    Upload your data exported as CSV from [Garmin](https://connect.garmin.com/modern/activities)  
-    *(note that only **running** is considered at the moment)*
-""")
-st.image(os.path.join(os.getcwd(), 'images', 'Screenshot 2024-11-26 093640.jpg'))
+        Upload your data exported as CSV from Garmin.  
+        *(note that only **running** activities are considered at the moment)*
+    """)
 
 # file upload
 uploaded_file = st.file_uploader("", type=["csv"])
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     df = cleaning_data(df)
-    st.write("Data Preview:")
-    st.dataframe(df)
 
+with st.expander("Where to obtain these data?"):
+    st.markdown('''
+    The data can be obtained through the official [Garmin Connect](https://connect.garmin.com/modern/activities) website. 
+    Please scroll down all the way down to consider all activities.
+    ''')
+    st.image(os.path.join(os.getcwd(), 'images', 'Screenshot 2024-11-26 093640.jpg'))
+
+if uploaded_file is not None:
     running = filtering_activity(df, "Running")
     # converting Pace in minutes
     running['Avg Pace'] = running['Avg Pace'].apply(convert_pace_to_minutes)
@@ -84,7 +106,8 @@ if uploaded_file is not None:
     # dealing with Ascent and Descent
     running['Total Ascent'] = pd.to_numeric(running['Total Ascent'], errors='coerce').fillna(0).astype(int)
     running['Total Descent'] = (pd.to_numeric(running['Total Descent'], errors='coerce').fillna(0).astype(int)* -1)    
-    st.dataframe(running)
+   
+    # st.dataframe(running)
 
     filtered_df = date_range_slider_filter(running, date_column="Date")
     #cumulative data
@@ -94,13 +117,19 @@ if uploaded_file is not None:
     filtered_df = add_cumulative_column(filtered_df, 'Total Ascent')
     filtered_df = add_cumulative_column(filtered_df, 'Total Descent')
 
-# different pages per activites
-# logo
-# mail
-# settings as pop up (age, etc)
-
 ### Running
 st.header("Running")
+
+# Calculs
+num_runs = len(filtered_df)  # Nombre de courses
+total_distance = filtered_df["Distance"].sum()  # Distance totale
+total_time = filtered_df["Time"].sum()  # Temps total
+
+# Affichage dans des colonnes
+col1, col2, col3 = st.columns(3)
+col1.metric("Sessions", f"{num_runs}")
+col2.metric("Distance", f"{total_distance:.0f} km")
+col3.metric("Time", f"{total_time:.0f}' ")
 
 popover = st.popover("What are you interested in?")
 distance = popover.checkbox("Distance", True)
@@ -111,14 +140,15 @@ cadence = popover.checkbox("Cadence", True)
 elevation = popover.checkbox("Ascent - Descent", True)
 calories = popover.checkbox("Calories", True)
 
+
 color_palette = {
-    "Distance": "#1f77b4",       # Bleu
-    "Duration": "#ff7f0e",       # Orange
-    "Pace": ["#2ca02c", "#d62728"],  # Vert et Rouge pour Avg et Best Pace
-    "Heart Rate": ["#9467bd", "#8c564b"],  # Violet et Marron pour Avg et Max HR
-    "Cadence": ["#e377c2", "#7f7f7f"],  # Rose et Gris pour Avg et Max Cadence
-    "Elevation": ["#17becf", "#bcbd22"],  # Cyan et Vert Olive pour Ascent et Descent
-    "Calories": "#bcbd22",       # Vert Olive
+    "Distance": "#1f77b4",       
+    "Duration": "#ff7f0e",       
+    "Pace": ["#2ca02c", "#d62728"],  
+    "Heart Rate": ["#f50606", "#cfc331"],  
+    "Cadence": ["#0244b2", "#09caca"],  
+    "Elevation": ["#17becf", "#bcbd22"],
+    "Calories": "#bcbd22", 
 }
 
 tab1, tab2 = st.tabs(["Evolution over time", "Total over time"])
@@ -135,10 +165,10 @@ with tab1:
             st.area_chart(data=filtered_df,  x='Date', y=['Avg Pace', 'Best Pace'], x_label=None, y_label='Pace (minute/km)', color=color_palette["Pace"], stack=None, width=700, height=300, use_container_width=False)
         if heart_rate:
             st.subheader("Heart Rate")
-            st.area_chart(data=filtered_df,  x='Date', y=['Avg HR', 'Max HR'], x_label=None, y_label='Heart rate (bpm)', color=color_palette["Heart Rate"], stack=None, width=700, height=300, use_container_width=False)
+            st.line_chart(data=filtered_df,  x='Date', y=['Avg HR', 'Max HR'], x_label=None, y_label='Heart rate (bpm)', color=color_palette["Heart Rate"], width=700, height=300, use_container_width=False)
         if cadence:
             st.subheader("Cadence")
-            st.area_chart(data=filtered_df,  x='Date', y=['Avg Run Cadence', 'Max Run Cadence'], x_label=None, y_label='Run cadence (ppm)', color=color_palette["Cadence"], stack=None, width=700, height=300, use_container_width=False)
+            st.line_chart(data=filtered_df,  x='Date', y=['Avg Run Cadence', 'Max Run Cadence'], x_label=None, y_label='Run cadence (ppm)', color=color_palette["Cadence"], width=700, height=300, use_container_width=False)
         #plotly or altair for defined values (pace, HR, cadency) (ex: y = 130-150 bom)
         # also trends ?
         if elevation: 
@@ -164,10 +194,14 @@ with tab2:
             st.area_chart(data=filtered_df, x='Date', y='Calories_cum', x_label=None, y_label='Cumulative calories (kCal)', color=color_palette["Calories"], stack=None, width=700, height=300, use_container_width=False)
 
 st.divider()
-st.markdown(''' 
-Future functionalities:  
-- amount of heart beats and steps, 
-- analysis of stride lengths, laps and elevation, 
-- treshold values (BPM / PPM)
-- favorites, training stress score, decompression
-''')
+with st.expander("Future fonctionalities to come"):
+    st.write('''
+        - amount of heart beats and steps, 
+        - analysis of stride lengths, laps and elevation, 
+        - treshold values (BPM / PPM)
+        - favorites, training stress score, decompression
+        - other garmin data API
+        - HR values 
+        - BMI
+    ''')
+st.caption('⚠️ Unofficial app, not provided by Garmin')
