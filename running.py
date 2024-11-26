@@ -169,4 +169,5 @@ Future functionalities:
 - amount of heart beats and steps, 
 - analysis of stride lengths, laps and elevation, 
 - treshold values (BPM / PPM)
+- favorites, training stress score, decompression
 ''')
