@@ -3,9 +3,6 @@ import pandas as pd
 import os
 import altair as alt
 import plotly.graph_objects as go
-import smtplib
-from email.mime.text import MIMEText
-
 
 #################### Computation
 def cleaning_data(df):
