@@ -119,15 +119,16 @@ st.header("Running")
 
 # Calculs
 if uploaded_file is not None:
-    num_runs = len(filtered_df)  # Nombre de courses
-    total_distance = filtered_df["Distance"].sum()  # Distance totale
-    total_time = filtered_df["Time"].sum()  # Temps total
+    num_runs = len(filtered_df)  
+    total_distance = filtered_df["Distance"].sum() 
+    total_time = filtered_df["Time"].sum()  
+    total_climbed = filtered_df['Total Ascent'].sum()
 
-    # Affichage dans des colonnes
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Sessions", f"{num_runs}")
     col2.metric("Distance", f"{total_distance:.0f} km")
     col3.metric("Time", f"{total_time:.0f}' ")
+    col4.metric("Climbed", f"{total_climbed:.0f} m")
 
 popover = st.popover("What are you interested in?")
 distance = popover.checkbox("Distance", True)
