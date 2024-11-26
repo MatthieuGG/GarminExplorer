@@ -1,30 +1,22 @@
 import streamlit as st
 import pandas as pd
+import os
+import altair as alt
+import plotly.graph_objects as go
 
-# Nettoyage et transformation des données (identique à ce que vous aviez)
+
+#################### Computation
 def cleaning_data(df):
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values(by='Date', ascending=True)
     df['Favorite'] = df['Favorite'].astype(bool)
-    # df['Time'] = pd.to_timedelta(df['Time'])
+    # cleaning the 00:00:00.0 format into 00:00:00 in 'Time'
+    df['Time'] = df['Time'].str.split('.').str[0] 
+    df['Time'] = df['Time'].apply(lambda x: f"00:{x}" if len(x.split(':')) == 2 else x)
+    # converting 'Time' in minutes
+    df['Time'] = pd.to_timedelta(df['Time']) 
+    df['Time'] = df['Time'].dt.total_seconds() / 60
     return df
-
-def clean_time_column(time_value):
-    try:
-        # Si le temps est au format `MM:SS.m` ou `SS.m`, on ajuste
-        if '.' in time_value:
-            minutes, seconds = time_value.split(':') if ':' in time_value else ("0", time_value)
-            seconds = seconds.split('.')[0]  # Prendre la partie avant la décimale
-            time_value = f"0:{minutes.zfill(2)}:{seconds.zfill(2)}"  # Reformater
-
-        # Convertir en timedelta pour uniformiser
-        clean_time = pd.to_timedelta(time_value)
-        # Revenir au format HH:MM:SS
-        return str(clean_time.components.hours).zfill(2) + ":" + \
-               str(clean_time.components.minutes).zfill(2) + ":" + \
-               str(clean_time.components.seconds).zfill(2)
-    except Exception as e:
-        return None  # Retourner None pour les valeurs non valides
 
 def filtering_activity(df, activity_type):
     if 'Activity Type' not in df.columns:
@@ -32,126 +24,149 @@ def filtering_activity(df, activity_type):
     filtered_df = df[df['Activity Type'] == activity_type]
     return filtered_df
 
-def plot_column_relationship_with_line_chart(df, x_column, y_column, x_label=None, y_label=None):
-    """
-    Trace un graphique de ligne pour deux colonnes en utilisant `st.line_chart`.
-    """
-    if x_column not in df.columns or y_column not in df.columns:
-        st.error(f"Le DataFrame doit contenir les colonnes '{x_column}' et '{y_column}'.")
-        return
+def add_cumulative_column(df, column_name):
+    cumulative_column_name = f'{column_name}_cum'
+    df[cumulative_column_name] = df[column_name].cumsum()
+    return df
 
-    # Préparer les données pour le graphique
-    data_to_plot = df[[x_column, y_column]]
+def convert_pace_to_minutes(pace_str):
+    try:
+        minutes, seconds = map(int, pace_str.split(':'))
+        return minutes + seconds / 60  # Minutes en décimal
+    except ValueError:
+        return None
 
-    # Afficher les titres et labels
-    # st.write(f"Graphique de '{y_column}' en fonction de '{x_column}':")
-    
-    # Utiliser st.line_chart pour créer le graphique
-    st.line_chart(data=data_to_plot.set_index(x_column), use_container_width=True)
+def date_range_slider_filter(df, date_column, title="Select a period", date_format="YYYY-MM-DD"):
+    # identify start and stop
+    min_date = df[date_column].min().date()
+    max_date = df[date_column].max().date()
 
-import streamlit as st
-import pandas as pd
-
-def plot_two_columns_with_line_chart(df, x_column, y_column1, y_column2, x_label=None, y_label1=None, y_label2=None, start_date=None, end_date=None):
-    """
-    Trace un graphique de ligne avec une colonne en X et deux colonnes en Y, 
-    après avoir filtré les données en fonction de la plage de dates.
-
-    Parameters:
-        df (pd.DataFrame): Le DataFrame contenant les données.
-        x_column (str): Le nom de la colonne pour l'axe des X.
-        y_column1 (str): Le nom de la première colonne pour l'axe des Y.
-        y_column2 (str): Le nom de la deuxième colonne pour l'axe des Y.
-        x_label (str, optional): Le label de l'axe des X. Par défaut, le nom de la colonne `x_column`.
-        y_label1 (str, optional): Le label de la première colonne Y. Par défaut, le nom de la colonne `y_column1`.
-        y_label2 (str, optional): Le label de la deuxième colonne Y. Par défaut, le nom de la colonne `y_column2`.
-        start_date (datetime.date, optional): La date de début pour filtrer.
-        end_date (datetime.date, optional): La date de fin pour filtrer.
-
-    Returns:
-        None: Affiche le graphique dans Streamlit.
-    """
-    # Vérification des colonnes
-    if x_column not in df.columns or y_column1 not in df.columns or y_column2 not in df.columns:
-        st.error(f"Le DataFrame doit contenir les colonnes '{x_column}', '{y_column1}' et '{y_column2}'.")
-        return
-
-    # Filtrer le DataFrame en fonction de la plage de dates (si fournie)
-    if start_date and end_date:
-        df = df[(df[x_column].dt.date >= pd.Timestamp(start_date)) & (df[x_column].dt.date <= pd.Timestamp(end_date))]
-
-    # Paramètres par défaut
-    x_label = x_label or x_column
-    y_label1 = y_label1 or y_column1
-    y_label2 = y_label2 or y_column2
-
-    # Préparer les données pour le graphique
-    data_to_plot = df[[x_column, y_column1, y_column2]]
-
-    # Affichage des titres et labels
-    # st.write(f"Graphique de '{y_column1}' et '{y_column2}' en fonction de '{x_column}':")
-    
-    # Utilisation de `st.line_chart` pour créer le graphique
-    st.line_chart(data=data_to_plot.set_index(x_column), use_container_width=True)
-
-############### Streamlit
-st.set_page_config(page_title="Garmin Explorer", page_icon="🏃‍➡️")
-st.write("# Welcome to the Garmin Explorer!")
-st.markdown("""
-    Please upload your data exported as CSV from Garmin
-    *(note that only **running** is considered at the moment)*.
-""")
-
-uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    df = cleaning_data(df)  # On applique la fonction de nettoyage et on assigne le résultat à df
-    df['Time'] = df['Time'].apply(clean_time_column)
-    st.write("Data Preview:")
-    st.dataframe(df)
-
-    ### Running
-    st.subheader("Running")
-
-    running = filtering_activity(df, "Running")
-    st.dataframe(running)
-
-    # Utiliser un slider pour définir l'intervalle de dates
-    start_date = running['Date'].min().date()
-    end_date = running['Date'].max().date()
-
-    # Utilisation de slider pour choisir une plage de dates
     selected_dates = st.slider(
-        "Sélectionnez la plage de dates",
-        min_value=start_date,
-        max_value=end_date,
-        value=(start_date, end_date),
-        format="YYYY-MM-DD"
+        title,
+        min_value=min_date,
+        max_value=max_date,
+        value=(min_date, max_date),
+        format=date_format,
     )
 
-    # Filtrer les données en fonction de la plage sélectionnée
+    # convert in datetime
     start_date = pd.to_datetime(selected_dates[0])
     end_date = pd.to_datetime(selected_dates[1])
 
-    # Filtrer les données
-    filtered_df = running[(running['Date'] >= start_date) & (running['Date'] <= end_date)]
+    filtered_df = df[(df[date_column] >= start_date) & (df[date_column] <= end_date)]
 
-    tab1, tab2 = st.tabs(["Evolution over time", "Total over time"])
+    return filtered_df
 
-    with tab1:
-        st.write("### Distance (km)")
-        plot_column_relationship_with_line_chart(filtered_df, x_column='Date', y_column='Distance', x_label="Date", y_label="Distance parcourue")
-        st.write("### Duration (HH:mm:ss)")
-        plot_column_relationship_with_line_chart(filtered_df, x_column='Date', y_column='Time')
-        st.write("### Pace (minute/km)")
-        plot_two_columns_with_line_chart(filtered_df, x_column='Date', y_column1='Avg Pace', y_column2='Best Pace', x_label="Date", y_label1="Distance parcourue", y_label2="Pace (min/km)")
-        st.write("### Steps cadency (PPM)")
-        plot_two_columns_with_line_chart(filtered_df, x_column='Date', y_column1='Avg Run Cadence', y_column2='Max Run Cadence')
-        st.write("### Heart Rate (BPM)")
-        plot_two_columns_with_line_chart(filtered_df, x_column='Date', y_column1='Avg HR', y_column2='Max HR', x_label="Date", y_label1="Distance parcourue", y_label2="Pace (min/km)")
-        st.write("### Calories (kcal)")
-        plot_column_relationship_with_line_chart(filtered_df, x_column='Date', y_column='Calories')
-        st.write("### Ascent / Descent")
-        plot_two_columns_with_line_chart(filtered_df, x_column='Date', y_column1='Total Ascent', y_column2='Total Descent')
-    with tab2:
-        st.write("...")
+############### Streamlit
+st.set_page_config(page_title="Garmin Explorer", page_icon="🏃‍➡️")
+st.title("Welcome to the Garmin Explorer!")
+st.markdown("""
+    Upload your data exported as CSV from [Garmin](https://connect.garmin.com/modern/activities)  
+    *(note that only **running** is considered at the moment)*
+""")
+st.image(os.path.join(os.getcwd(), 'images', 'Screenshot 2024-11-26 093640.jpg'))
+
+# file upload
+uploaded_file = st.file_uploader("", type=["csv"])
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    df = cleaning_data(df)
+    st.write("Data Preview:")
+    st.dataframe(df)
+
+    running = filtering_activity(df, "Running")
+    # converting Pace in minutes
+    running['Avg Pace'] = running['Avg Pace'].apply(convert_pace_to_minutes)
+    running['Best Pace'] = running['Best Pace'].apply(convert_pace_to_minutes)
+    # converting Candecy in int
+    running['Avg Run Cadence'] = pd.to_numeric(running['Avg Run Cadence'], errors='coerce').fillna(0).astype(int)
+    running['Max Run Cadence'] = pd.to_numeric(running['Max Run Cadence'], errors='coerce').fillna(0).astype(int)
+    # dealing with Ascent and Descent
+    running['Total Ascent'] = pd.to_numeric(running['Total Ascent'], errors='coerce').fillna(0).astype(int)
+    running['Total Descent'] = (pd.to_numeric(running['Total Descent'], errors='coerce').fillna(0).astype(int)* -1)    
+    st.dataframe(running)
+
+    filtered_df = date_range_slider_filter(running, date_column="Date")
+    #cumulative data
+    filtered_df = add_cumulative_column(filtered_df, 'Distance')
+    filtered_df = add_cumulative_column(filtered_df, 'Calories')
+    filtered_df = add_cumulative_column(filtered_df, 'Time')
+    filtered_df = add_cumulative_column(filtered_df, 'Total Ascent')
+    filtered_df = add_cumulative_column(filtered_df, 'Total Descent')
+
+# different pages per activites
+# logo
+# mail
+# settings as pop up (age, etc)
+
+### Running
+st.header("Running")
+
+popover = st.popover("What are you interested in?")
+distance = popover.checkbox("Distance", True)
+duration = popover.checkbox("Duration", True)
+pace = popover.checkbox("Pace", True)
+heart_rate = popover.checkbox("Heart Rate", True)
+cadence = popover.checkbox("Cadence", True)
+elevation = popover.checkbox("Ascent - Descent", True)
+calories = popover.checkbox("Calories", True)
+
+color_palette = {
+    "Distance": "#1f77b4",       # Bleu
+    "Duration": "#ff7f0e",       # Orange
+    "Pace": ["#2ca02c", "#d62728"],  # Vert et Rouge pour Avg et Best Pace
+    "Heart Rate": ["#9467bd", "#8c564b"],  # Violet et Marron pour Avg et Max HR
+    "Cadence": ["#e377c2", "#7f7f7f"],  # Rose et Gris pour Avg et Max Cadence
+    "Elevation": ["#17becf", "#bcbd22"],  # Cyan et Vert Olive pour Ascent et Descent
+    "Calories": "#bcbd22",       # Vert Olive
+}
+
+tab1, tab2 = st.tabs(["Evolution over time", "Total over time"])
+with tab1:
+    if uploaded_file is not None:
+        if distance: 
+            st.subheader("Distance")
+            st.area_chart(data=filtered_df, x='Date', y='Distance', x_label=None, y_label='Distance (km)', color=color_palette["Distance"], stack=None, width=700, height=300, use_container_width=False)
+        if duration:
+            st.subheader("Duration")
+            st.area_chart(data=filtered_df, x='Date', y='Time', x_label=None, y_label='Duration (minutes)', color=color_palette["Duration"], width=700, height=300, use_container_width=False)
+        if pace:
+            st.subheader("Pace")
+            st.area_chart(data=filtered_df,  x='Date', y=['Avg Pace', 'Best Pace'], x_label=None, y_label='Pace (minute/km)', color=color_palette["Pace"], stack=None, width=700, height=300, use_container_width=False)
+        if heart_rate:
+            st.subheader("Heart Rate")
+            st.area_chart(data=filtered_df,  x='Date', y=['Avg HR', 'Max HR'], x_label=None, y_label='Heart rate (bpm)', color=color_palette["Heart Rate"], stack=None, width=700, height=300, use_container_width=False)
+        if cadence:
+            st.subheader("Cadence")
+            st.area_chart(data=filtered_df,  x='Date', y=['Avg Run Cadence', 'Max Run Cadence'], x_label=None, y_label='Run cadence (ppm)', color=color_palette["Cadence"], stack=None, width=700, height=300, use_container_width=False)
+        #plotly or altair for defined values (pace, HR, cadency) (ex: y = 130-150 bom)
+        # also trends ?
+        if elevation: 
+            st.subheader("Elevation")
+            st.area_chart(data=filtered_df,  x='Date', y=['Total Ascent', 'Total Descent'], x_label=None, y_label='Elevation (m)', color=color_palette["Elevation"], stack=None, width=700, height=300, use_container_width=False)
+        if calories:
+            st.subheader("Calories")
+            st.area_chart(data=filtered_df, x='Date', y='Calories', x_label=None, y_label='Calories (kCal)', color=color_palette["Calories"], stack=None, width=700, height=300, use_container_width=False)
+        # future: cum BPM, cum PPM, stride length, laps, elevation
+with tab2:
+    if uploaded_file is not None:
+        if distance:
+            st.subheader("Distance")
+            st.area_chart(data=filtered_df, x='Date', y='Distance_cum', x_label=None, y_label='Cumulative distance (km)', color=color_palette["Distance"], stack=None, width=700, height=300, use_container_width=False)
+        if duration:
+            st.subheader("Duration")
+            st.area_chart(data=filtered_df, x='Date', y='Time_cum', x_label=None, y_label='Cumulative time (minutes)', color=color_palette["Duration"], stack=None, width=700, height=300, use_container_width=False)
+        if elevation:
+            st.subheader("Elevation")
+            st.area_chart(data=filtered_df,  x='Date', y=['Total Ascent_cum', 'Total Descent_cum'], x_label=None, y_label='Cumulative elevation (m)', color=color_palette["Elevation"], stack=None, width=700, height=300, use_container_width=False)
+        if calories:
+            st.subheader("Calories")
+            st.area_chart(data=filtered_df, x='Date', y='Calories_cum', x_label=None, y_label='Cumulative calories (kCal)', color=color_palette["Calories"], stack=None, width=700, height=300, use_container_width=False)
+
+st.divider()
+st.markdown(''' 
+Future functionalities:  
+- amount of heart beats and steps, 
+- analysis of stride lengths, laps and elevation, 
+- treshold values (BPM / PPM)
+''')
