@@ -6,6 +6,12 @@ import plotly.graph_objects as go
 
 #################### Computation
 def cleaning_data(df):
+    df.columns = ['Activity Type', 'Date', 'Favorite', 'Title', 'Distance', 'Calories',
+       'Time', 'Avg HR', 'Max HR', 'Avg Run Cadence', 'Max Run Cadence',
+       'Avg Pace', 'Best Pace', 'Total Ascent', 'Total Descent',
+       'Avg Stride Length', 'Training Stress Score®', 'Decompression',
+       'Best Lap Time', 'Number of Laps', 'Moving Time', 'Elapsed Time',
+       'Min Elevation', 'Max Elevation']
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values(by='Date', ascending=True)
     df['Favorite'] = df['Favorite'].astype(bool)
@@ -76,7 +82,7 @@ st.sidebar.link_button(
 
 st.markdown("""
         Upload your data exported as CSV from Garmin.  
-        *(note that only **running** activities are considered at the moment)*
+        *(note that only **running activities** from a **Forerunner 45** exported in **English** are considered at the moment)*
     """)
 
 # file upload
@@ -91,6 +97,14 @@ with st.expander("Where to obtain these data?"):
     Please scroll down all the way down to consider all activities.
     ''')
     st.image(os.path.join(os.getcwd(), 'images', 'Screenshot 2024-11-26 093640.jpg'))
+    st.write('CSV file format currently supported:')
+    st.image(os.path.join(os.getcwd(), 'images', 'Screenshot 2024-11-27 095303.jpg'))
+    st.markdown('''['Activity Type', 'Date', 'Favorite', 'Title', 'Distance', 'Calories',
+       'Time', 'Avg HR', 'Max HR', 'Avg Run Cadence', 'Max Run Cadence',
+       'Avg Pace', 'Best Pace', 'Total Ascent', 'Total Descent',
+       'Avg Stride Length', 'Training Stress Score®', 'Decompression',
+       'Best Lap Time', 'Number of Laps', 'Moving Time', 'Elapsed Time',
+       'Min Elevation', 'Max Elevation']''')
 
 if uploaded_file is not None:
     running = filtering_activity(df, "Running")
